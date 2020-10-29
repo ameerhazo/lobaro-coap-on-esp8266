@@ -12,24 +12,42 @@ BUILD_BASE	= build
 FW_BASE		= firmware
 
 # Base directory for the compiler
-XTENSA_TOOLS_ROOT ?= C:\Espressif\xtensa-lx106-elf\bin
+XTENSA_TOOLS_ROOT ?= C:/Espressif/xtensa-lx106-elf/bin
 
 # base directory of the ESP8266 SDK package, absolute
- SDK_BASE	?= C:\Espressif\ESP8266_SDK
+SDK_BASE	?= C:/Espressif/ESP8266_SDK
 #SDK_BASE	?= C:\Espressif\ESP8266_SDK_150
-SDK_TOOLS	?= C:\Espressif\utils
+SDK_TOOLS	?= C:/Espressif/utils/ESP8266
 
 # esptool path and port
 ESPTOOL ?= $(SDK_TOOLS)/esptool.exe
-ESPPORT ?= COM14
+#COM3 NodeMCU COM5 Wemos
+#ESPPORT ?= COM5
+ESPPORT ?= COM3
 # Baud rate for programmer
- BAUD ?= 921600
+BAUD ?= 115200
+#BAUD ?= 9600
 #BAUD ?= 512000
 
 # SPI_SPEED = 40, 26, 20, 80
+ifeq ($(ESPPORT), COM5)
 SPI_SPEED ?= 40
-# SPI_MODE: qio, qout, dio, dout
-SPI_MODE ?= qio
+else
+	ifeq ($(ESPPORT),COM3)
+		SPI_SPEED ?= 26
+		endif
+endif
+# SPI_MODE: qio, qout, dio, dout 
+# DIO = NodeMCU
+# QIO = Wemos
+ifeq ($(ESPPORT), COM5)
+	SPI_MODE ?= DOUT
+else
+	ifeq ($(ESPPORT), COM3)
+		SPI_MODE ?= DIO
+		endif
+endif
+#SPI_MODE ?= DIO
 # SPI_SIZE_MAP
 # 0 : 512 KB (256 KB + 256 KB)
 # 1 : 256 KB
@@ -38,9 +56,17 @@ SPI_MODE ?= qio
 # 4 : 4096 KB (512 KB + 512 KB)
 # 5 : 2048 KB (1024 KB + 1024 KB)
 # 6 : 4096 KB (1024 KB + 1024 KB)
-SPI_SIZE_MAP ?= 0
+#SPI_SIZE_MAP (NodeMCU ESP12E = 4) // (ESP8285 = 2)
+ifeq ($(ESPPORT), COM5)
+	SPI_SIZE_MAP ?= 2
+else
+	ifeq ($(ESPPORT), COM3)
+		SPI_SIZE_MAP ?= 6
+		endif
+endif
 
-ifeq ($(SPI_SPEED), 26.7)
+
+ifeq ($(SPI_SPEED), 26)
     freqdiv = 1
     flashimageoptions = -ff 26m
 else
@@ -94,7 +120,7 @@ else
       ifeq ($(SPI_SIZE_MAP), 4)
 		size_map = 4
 		flash = 4096
-		flashimageoptions += -fs 32m
+		flashimageoptions += -fs 8m
       else
         ifeq ($(SPI_SIZE_MAP), 5)
           size_map = 5
@@ -181,7 +207,7 @@ $1/%.o: %.c
 	$(Q) $(CC) $(INCDIR) $(MODULE_INCDIR) $(EXTRA_INCDIR) $(SDK_INCDIR) $(CFLAGS)  -c $$< -o $$@
 endef
 
-.PHONY: all checkdirs clean flash flashinit flashonefile rebuild
+.PHONY: all checkdirs clean erase flash flashinit flashonefile rebuild
 
 all: checkdirs $(TARGET_OUT)
 
@@ -194,9 +220,9 @@ $(TARGET_OUT): $(APP_AR)
 	$(vecho) "------------------------------------------------------------------------------"
 	$(Q) $(ESPTOOL) elf2image $(TARGET_OUT) -o$(FW_BASE)/ $(flashimageoptions)
 	$(vecho) "------------------------------------------------------------------------------"
-	$(vecho) "Generate 0x00000.bin and 0x40000.bin successully in folder $(FW_BASE)."
+	$(vecho) "Generate 0x00000.bin and 0x10000.bin successully in folder $(FW_BASE)."
 	$(vecho) "0x00000.bin-------->0x00000"
-	$(vecho) "0x40000.bin-------->0x40000"
+	$(vecho) "0x10000.bin-------->0x10000"
 	$(vecho) "Done"
 
 $(APP_AR): $(OBJ)
@@ -219,7 +245,7 @@ flashonefile: all
 	$(ESPTOOL) -p $(ESPPORT) -b $(BAUD) write_flash $(flashimageoptions) 0x00000 $(FW_BASE)/eagle.app.flash.bin
 
 flash: all
-	$(ESPTOOL) -p $(ESPPORT) -b $(BAUD) write_flash $(flashimageoptions) 0x00000 $(FW_BASE)/0x00000.bin 0x40000 $(FW_BASE)/0x40000.bin
+	$(ESPTOOL) -p $(ESPPORT) -b $(BAUD) write_flash $(flashimageoptions) 0x00000 $(FW_BASE)/0x00000.bin 0x10000 $(FW_BASE)/0x10000.bin
 
 # ===============================================================
 # From http://bbs.espressif.com/viewtopic.php?f=10&t=305
@@ -241,16 +267,25 @@ flash: all
 
 # FLASH SIZE
 flashinit:
+ifeq ($(ESPPORT), COM3)
 	$(vecho) "Flash init data:"
 	$(vecho) "Default config (Clear SDK settings):"
-	$(vecho) "blank.bin-------->0x3e000"
-	$(vecho) "blank.bin-------->0x3fc000"
-	$(vecho) "esp_init_data_default.bin-------->0x3fc000"
-	$(ESPTOOL) -p $(ESPPORT) write_flash $(flashimageoptions) \
-		0x3e000 $(SDK_BASE)/bin/blank.bin \
-		0x3fc000 $(SDK_BASE)/bin/esp_init_data_default.bin \
-		0x3fe000 $(SDK_BASE)/bin/blank.bin
-
+	$(vecho) "blank.bin-------->0x3FE000"
+	$(vecho) "blank.bin-------->0x3FB000"
+	$(vecho) "esp_init_data_default.bin-------->0x3FC000"
+	$(ESPTOOL) -p $(ESPPORT) write_flash $(flashimageoptions)  0x3FC000 $(SDK_BASE)/bin/esp_init_data_default.bin
+	#$(ESPTOOL) -p $(ESPPORT) write_flash $(flashimageoptions) 0x3FB000 $(SDK_BASE)/bin/blank.bin 0x3FE000 $(SDK_BASE)/bin/blank.bin 0x3FC000 $(SDK_BASE)/bin/esp_init_data_default.bin
+else
+  ifeq ($(ESPPORT), COM5)
+			$(vecho) "Flash init data:"
+			$(vecho) "Default config (Clear SDK settings):"
+			$(vecho) "blank.bin-------->0x07E000"
+			$(vecho) "blank.bin-------->0x0FE000"
+			$(vecho) "esp_init_data_default.bin-------->0x0FC000"
+			$(ESPTOOL) -p $(ESPPORT) write_flash $(flashimageoptions)  0x0FC000 $(SDK_BASE)/bin/esp_init_data_default.bin
+			#$(ESPTOOL) -p $(ESPPORT) write_flash $(flashimageoptions) 0x07E000 $(SDK_BASE)/bin/blank.bin 0x0FE000 $(SDK_BASE)/bin/blank.bin 0x0FC000 $(SDK_BASE)/bin/esp_init_data_default.bin
+  endif
+endif
 rebuild: clean all
 
 clean:
@@ -259,5 +294,8 @@ clean:
 	$(Q) rm -rf $(BUILD_DIR)
 	$(Q) rm -rf $(BUILD_BASE)
 	$(Q) rm -rf $(FW_BASE)
+	
+erase:
+	$(ESPTOOL) -p $(ESPPORT) erase_flash 
 
 $(foreach bdir,$(BUILD_DIR),$(eval $(call compile-objects,$(bdir))))
