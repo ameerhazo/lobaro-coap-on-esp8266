@@ -1,0 +1,3 @@
+mingw32-make.exe -f ${ProjDirPath}/Makefile
+
+${workspace_loc:/lobaro-coap-on-esp8266}/
